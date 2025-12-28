@@ -1,0 +1,100 @@
+// Prisma schema for Testimonial Management SaaS
+// Run `npx prisma migrate dev` to create/update the database
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// User model - represents business owners/admins
+model User {
+  id                  String   @id @default(uuid())
+  email               String   @unique
+  passwordHash        String
+  name                String
+  businessName        String
+  subscriptionTier    String   @default("FREE") // FREE, BASIC, PRO
+  brandingSettings    String?  // JSON string containing logo URL, brand colors, company name
+  onboardingCompleted Boolean  @default(false) // Track if user completed onboarding
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  // Relations
+  testimonials    Testimonial[]
+  widgets         Widget[]
+  collectionLinks CollectionLink[]
+
+  @@index([email])
+}
+
+// Testimonial model - customer testimonials collected by businesses
+model Testimonial {
+  id                String    @id @default(uuid())
+  userId            String
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  collectionLinkId  String?   // Reference to the collection link used
+  collectionLink    CollectionLink? @relation(fields: [collectionLinkId], references: [id], onDelete: SetNull)
+  status            String    @default("PENDING") // PENDING, APPROVED, REJECTED
+  originalText      String
+  displayText       String?   // Version displayed publicly (may differ from original)
+  cleanedText       String?   // AI-improved version
+  clientName        String
+  clientEmail       String?
+  clientRole        String?   // e.g., "CEO at Company X"
+  clientCompany     String?   // Company/organization name
+  rating            Int?      // 1-5 star rating
+  submissionType    String    @default("TEXT") // TEXT, IMAGE, AUDIO, VIDEO
+  mediaUrl          String?   // URL to image/audio/video
+  showFullName      Boolean   @default(true)  // Display full name or initials
+  allowPublic       Boolean   @default(true)  // Permission to use publicly
+  verificationBadge Boolean   @default(false)
+  verificationProof String?   // e.g., email screenshot URL
+  submittedAt       DateTime  @default(now())
+  approvedAt        DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@index([userId])
+  @@index([status])
+  @@index([collectionLinkId])
+}
+
+// Widget model - embeddable testimonial display widgets
+model Widget {
+  id         String   @id @default(uuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name       String // e.g., "Homepage Widget", "Landing Page Carousel"
+  widgetType String   @default("GRID") // GRID, CAROUSEL, LIST, SINGLE
+  embedCode  String   @unique @default(uuid()) // Unique code for embedding
+  styling    String? // JSON string containing colors, fonts, layout preferences
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([userId])
+  @@index([embedCode])
+}
+
+// CollectionLink model - public URLs for collecting testimonials
+model CollectionLink {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  slug        String   @unique // For public URL like /collect/[slug]
+  title       String // e.g., "Share your experience with us"
+  description String?
+  isActive    Boolean  @default(true)
+  clickCount  Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  // Relations
+  testimonials Testimonial[]
+
+  @@index([userId])
+  @@index([slug])
+}
