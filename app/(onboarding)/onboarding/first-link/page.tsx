@@ -33,19 +33,37 @@ export default function FirstLinkPage() {
   const [copied, setCopied] = useState(false);
 
   const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
-  const fullUrl = collectionLink ? `${baseUrl}/collect/${collectionLink.slug}` : "";
+  const fullUrl = collectionLink ? `${baseUrl}/submit/${collectionLink.slug}` : "";
 
-  // Auto-create collection link on mount
+  // Fetch existing links or create new one on mount
   useEffect(() => {
     if (!collectionLink && !isCreating) {
-      createCollectionLink();
+      fetchOrCreateCollectionLink();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const createCollectionLink = async () => {
+  const fetchOrCreateCollectionLink = async () => {
     setIsCreating(true);
     try {
+      // First, check if user already has collection links
+      const getResponse = await fetch("/api/collection-links");
+      if (getResponse.ok) {
+        const getData = await getResponse.json();
+        
+        if (getData.collectionLinks && getData.collectionLinks.length > 0) {
+          // User already has links, use the first one
+          const existingLink = getData.collectionLinks[0];
+          setCollectionLink({
+            slug: existingLink.slug,
+            title: existingLink.title,
+          });
+          setIsCreating(false);
+          return;
+        }
+      }
+
+      // No existing links, create a new one
       const response = await fetch("/api/collection-links", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -71,6 +89,10 @@ export default function FirstLinkPage() {
     } finally {
       setIsCreating(false);
     }
+  };
+
+  const createCollectionLink = async () => {
+    fetchOrCreateCollectionLink();
   };
 
   const handleCopyLink = async () => {
