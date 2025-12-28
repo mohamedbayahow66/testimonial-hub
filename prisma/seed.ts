@@ -148,11 +148,11 @@ async function main() {
       businessName: "Free Startup",
       subscriptionTier: "FREE",
       onboardingCompleted: true,
-      brandingSettings: JSON.stringify({
+      brandingSettings: {
         logoUrl: null,
         primaryColor: "#3b82f6",
         companyName: "Free Startup",
-      }),
+      },
     },
   });
   console.log(`  ✅ Created FREE user: ${freeUser.email}`);
@@ -167,11 +167,11 @@ async function main() {
       businessName: "Basic Solutions LLC",
       subscriptionTier: "BASIC",
       onboardingCompleted: true,
-      brandingSettings: JSON.stringify({
+      brandingSettings: {
         logoUrl: null,
         primaryColor: "#10b981",
         companyName: "Basic Solutions LLC",
-      }),
+      },
     },
   });
   console.log(`  ✅ Created BASIC user: ${basicUser.email}`);
@@ -186,11 +186,11 @@ async function main() {
       businessName: "Pro Enterprise Corp",
       subscriptionTier: "PRO",
       onboardingCompleted: true,
-      brandingSettings: JSON.stringify({
+      brandingSettings: {
         logoUrl: "https://example.com/logo.png",
         primaryColor: "#7c3aed",
         companyName: "Pro Enterprise Corp",
-      }),
+      },
     },
   });
   console.log(`  ✅ Created PRO user: ${proUser.email}`);
@@ -319,7 +319,8 @@ async function main() {
 
   for (const user of users) {
     const widgetCount = user.subscriptionTier === "FREE" ? 1 : user.subscriptionTier === "BASIC" ? 3 : 4;
-    const brandingSettings = user.brandingSettings ? JSON.parse(user.brandingSettings) : { primaryColor: "#7c3aed" };
+    // brandingSettings is now a native JSON object in PostgreSQL
+    const branding = (user.brandingSettings as { primaryColor?: string } | null) || { primaryColor: "#7c3aed" };
     
     for (let i = 0; i < widgetCount; i++) {
       const template = widgetTemplates[i];
@@ -329,13 +330,13 @@ async function main() {
           userId: user.id,
           name: template.name,
           widgetType: template.type,
-          styling: JSON.stringify({
-            primaryColor: brandingSettings.primaryColor || "#7c3aed",
+          styling: {
+            primaryColor: branding.primaryColor || "#7c3aed",
             backgroundColor: "#ffffff",
             fontFamily: "Inter",
             borderRadius: "12px",
             showVerificationBadge: true,
-          }),
+          },
           isActive: i === 0, // Only first widget is active
         },
       });

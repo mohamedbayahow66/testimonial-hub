@@ -49,11 +49,11 @@ export async function POST(request: NextRequest) {
         name,
         businessName,
         subscriptionTier: "FREE",
-        brandingSettings: JSON.stringify({
+        brandingSettings: {
           logoUrl: null,
           primaryColor: "#7c3aed",
           companyName: businessName,
-        }),
+        },
       },
       select: {
         id: true,

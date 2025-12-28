@@ -111,10 +111,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      widget: {
-        ...widget,
-        styling: widget.styling ? JSON.parse(widget.styling) : null,
-      },
+      widget,
     }, { status: 201 });
   } catch (error) {
     console.error("Error creating widget:", error);

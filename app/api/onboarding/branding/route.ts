@@ -44,11 +44,11 @@ export async function POST(request: NextRequest) {
       where: { id: session.user.id },
       data: {
         businessName,
-        brandingSettings: JSON.stringify({
+        brandingSettings: {
           logoUrl: logoUrl || null,
           primaryColor,
           companyName: businessName,
-        }),
+        },
       },
       select: {
         id: true,

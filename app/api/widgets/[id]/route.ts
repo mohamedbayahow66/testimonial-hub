@@ -53,10 +53,7 @@ export async function GET(
     }
 
     return NextResponse.json({
-      widget: {
-        ...widget,
-        styling: widget.styling ? JSON.parse(widget.styling) : null,
-      },
+      widget,
     });
   } catch (error) {
     console.error("Error fetching widget:", error);
@@ -124,16 +121,13 @@ export async function PATCH(
         ...(name !== undefined && { name }),
         ...(widgetType !== undefined && { widgetType }),
         ...(isActive !== undefined && { isActive }),
-        ...(styling !== undefined && { styling: JSON.stringify(styling) }),
+        ...(styling !== undefined && { styling }),
       },
     });
 
     return NextResponse.json({
       success: true,
-      widget: {
-        ...updatedWidget,
-        styling: updatedWidget.styling ? JSON.parse(updatedWidget.styling) : null,
-      },
+      widget: updatedWidget,
     });
   } catch (error) {
     console.error("Error updating widget:", error);

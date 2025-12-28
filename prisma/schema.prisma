@@ -6,8 +6,9 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 // User model - represents business owners/admins
@@ -18,7 +19,7 @@ model User {
   name                String
   businessName        String
   subscriptionTier    String   @default("FREE") // FREE, BASIC, PRO
-  brandingSettings    String?  // JSON string containing logo URL, brand colors, company name
+  brandingSettings    Json?    // JSON containing logo URL, brand colors, company name
   onboardingCompleted Boolean  @default(false) // Track if user completed onboarding
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
@@ -71,7 +72,7 @@ model Widget {
   name       String // e.g., "Homepage Widget", "Landing Page Carousel"
   widgetType String   @default("GRID") // GRID, CAROUSEL, LIST, SINGLE
   embedCode  String   @unique @default(uuid()) // Unique code for embedding
-  styling    String? // JSON string containing colors, fonts, layout preferences
+  styling    Json?   // JSON containing colors, fonts, layout preferences
   isActive   Boolean  @default(true)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
