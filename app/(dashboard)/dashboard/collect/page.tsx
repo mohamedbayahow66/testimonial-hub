@@ -7,6 +7,7 @@ import { EmptyState } from "@/components/dashboard/empty-state";
 import { CollectionLinkCard } from "@/components/dashboard/collection-link-card";
 import { UsageProgressCompact } from "@/components/dashboard/usage-progress";
 import { CreateCollectionLinkButton } from "@/components/dashboard/create-collection-link-button";
+import { CollectionLinksFilter } from "@/components/dashboard/collection-links-filter";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { 
@@ -22,7 +23,14 @@ export const metadata = {
   description: "Create links to collect customer testimonials",
 };
 
-export default async function CollectPage() {
+interface CollectPageProps {
+  searchParams: {
+    search?: string;
+    status?: string;
+  };
+}
+
+export default async function CollectPage({ searchParams }: CollectPageProps) {
   const session = await auth();
   const userId = session?.user?.id;
 
@@ -30,19 +38,40 @@ export default async function CollectPage() {
     redirect("/login");
   }
 
-  // Fetch collection links, stats, and usage data
-  const [collectionLinks, totalClicks, totalSubmissions, usage] = await Promise.all([
+  const search = searchParams.search || "";
+  const status = searchParams.status || "all";
+
+  // Build where clause based on filters
+  const whereClause: {
+    userId: string;
+    title?: { contains: string; mode: "insensitive" };
+    isActive?: boolean;
+  } = { userId };
+
+  if (search) {
+    whereClause.title = { contains: search, mode: "insensitive" };
+  }
+
+  if (status === "active") {
+    whereClause.isActive = true;
+  } else if (status === "inactive") {
+    whereClause.isActive = false;
+  }
+
+  // Fetch collection links with testimonial counts
+  const [collectionLinksRaw, totalClicks, totalSubmissions, usage] = await Promise.all([
     db.collectionLink.findMany({
-      where: { userId },
+      where: whereClause,
       orderBy: { createdAt: "desc" },
-      select: {
-        id: true,
-        slug: true,
-        title: true,
-        description: true,
-        isActive: true,
-        clickCount: true,
-        createdAt: true,
+      include: {
+        _count: {
+          select: { testimonials: true }
+        },
+        testimonials: {
+          orderBy: { submittedAt: "desc" },
+          take: 1,
+          select: { submittedAt: true }
+        }
       },
     }),
     db.collectionLink.aggregate({
@@ -53,7 +82,26 @@ export default async function CollectPage() {
     getUsageStats(userId),
   ]);
 
-  const activeLinks = collectionLinks.filter(l => l.isActive).length;
+  // Transform data to include analytics
+  const collectionLinks = collectionLinksRaw.map(link => ({
+    id: link.id,
+    slug: link.slug,
+    title: link.title,
+    description: link.description,
+    isActive: link.isActive,
+    clickCount: link.clickCount,
+    createdAt: link.createdAt,
+    testimonialCount: link._count.testimonials,
+    lastSubmissionAt: link.testimonials[0]?.submittedAt || null,
+  }));
+
+  // Get counts for filter badges
+  const [totalLinks, activeLinks, inactiveLinks] = await Promise.all([
+    db.collectionLink.count({ where: { userId } }),
+    db.collectionLink.count({ where: { userId, isActive: true } }),
+    db.collectionLink.count({ where: { userId, isActive: false } }),
+  ]);
+
   const isAtLimit = usage.collectionLinks.isAtLimit;
   const isNearLimit = usage.collectionLinks.isNearLimit;
 
@@ -64,7 +112,7 @@ export default async function CollectPage() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Collection Links</h1>
           <p className="text-muted-foreground">
-            Create shareable links to collect testimonials from your customers
+            Share these links with clients to collect testimonials
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -189,7 +237,7 @@ export default async function CollectPage() {
       </div>
 
       {/* Collection Links List */}
-      {collectionLinks.length === 0 ? (
+      {totalLinks === 0 ? (
         <Card>
           <CardContent className="pt-6">
             <EmptyState
@@ -206,20 +254,39 @@ export default async function CollectPage() {
       ) : (
         <Card>
           <CardHeader>
-            <CardTitle>Your Collection Links</CardTitle>
-            <CardDescription>
-              Share these links with customers to collect testimonials
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {collectionLinks.map((link) => (
-                <CollectionLinkCard 
-                  key={link.id} 
-                  link={link} 
-                />
-              ))}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <CardTitle>Your Collection Links</CardTitle>
+                <CardDescription>
+                  Share these links with customers to collect testimonials
+                </CardDescription>
+              </div>
             </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* Search and Filter */}
+            <CollectionLinksFilter
+              totalCount={totalLinks}
+              activeCount={activeLinks}
+              inactiveCount={inactiveLinks}
+            />
+            
+            {/* Links List */}
+            {collectionLinks.length === 0 ? (
+              <div className="py-8 text-center text-muted-foreground">
+                <p>No collection links match your search criteria.</p>
+                <p className="text-sm mt-1">Try adjusting your filters or search term.</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {collectionLinks.map((link) => (
+                  <CollectionLinkCard 
+                    key={link.id} 
+                    link={link} 
+                  />
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
       )}

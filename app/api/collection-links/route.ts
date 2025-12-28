@@ -8,6 +8,34 @@ import {
   getUsageStats 
 } from "@/lib/tier-enforcement";
 
+// In-memory rate limiting store (for production, use Redis)
+const rateLimitStore = new Map<string, { count: number; resetTime: number }>();
+
+const RATE_LIMIT_MAX = 10; // Max 10 links per hour
+const RATE_LIMIT_WINDOW = 60 * 60 * 1000; // 1 hour in milliseconds
+
+/**
+ * Check rate limit for creating collection links
+ */
+function checkRateLimit(userId: string): { allowed: boolean; retryAfter?: number } {
+  const now = Date.now();
+  const userLimit = rateLimitStore.get(userId);
+
+  if (!userLimit || now > userLimit.resetTime) {
+    // Reset or initialize
+    rateLimitStore.set(userId, { count: 1, resetTime: now + RATE_LIMIT_WINDOW });
+    return { allowed: true };
+  }
+
+  if (userLimit.count >= RATE_LIMIT_MAX) {
+    const retryAfter = Math.ceil((userLimit.resetTime - now) / 1000);
+    return { allowed: false, retryAfter };
+  }
+
+  userLimit.count++;
+  return { allowed: true };
+}
+
 /**
  * Generate a unique slug for collection links
  */
@@ -20,6 +48,14 @@ function generateSlug(businessName: string): string {
   
   const randomSuffix = Math.random().toString(36).substring(2, 8);
   return `${baseSlug}-${randomSuffix}`;
+}
+
+/**
+ * Validate custom slug format
+ */
+function isValidSlug(slug: string): boolean {
+  const slugRegex = /^[a-z0-9-]{3,50}$/;
+  return slugRegex.test(slug);
 }
 
 /**
@@ -78,6 +114,23 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Check rate limit
+    const rateLimit = checkRateLimit(session.user.id);
+    if (!rateLimit.allowed) {
+      return NextResponse.json(
+        { 
+          error: `Rate limit exceeded. You can create up to ${RATE_LIMIT_MAX} links per hour. Try again later.`,
+          retryAfter: rateLimit.retryAfter,
+        },
+        { 
+          status: 429,
+          headers: {
+            "Retry-After": String(rateLimit.retryAfter),
+          },
+        }
+      );
+    }
+
     // Get user's onboarding status and current collection link count
     const user = await db.user.findUnique({
       where: { id: session.user.id },
@@ -126,18 +179,46 @@ export async function POST(request: NextRequest) {
     }
 
     const { title, description } = validatedFields.data;
+    const { customSlug, isActive = true } = body;
 
-    // Generate unique slug
-    const slug = generateSlug(session.user.businessName);
+    // Determine the slug to use
+    let finalSlug: string;
 
-    // Check if slug already exists (very unlikely but just in case)
-    const existingLink = await db.collectionLink.findUnique({
-      where: { slug },
-    });
+    if (customSlug) {
+      // Validate custom slug format
+      if (!isValidSlug(customSlug)) {
+        return NextResponse.json(
+          { error: "Invalid slug format. Use lowercase letters, numbers, and hyphens only (3-50 characters)" },
+          { status: 400 }
+        );
+      }
 
-    const finalSlug = existingLink 
-      ? `${slug}-${Date.now().toString(36)}`
-      : slug;
+      // Check if custom slug is already taken
+      const existingLink = await db.collectionLink.findUnique({
+        where: { slug: customSlug },
+      });
+
+      if (existingLink) {
+        return NextResponse.json(
+          { error: "This slug is already taken. Please choose a different one." },
+          { status: 400 }
+        );
+      }
+
+      finalSlug = customSlug;
+    } else {
+      // Auto-generate slug from business name
+      const baseSlug = generateSlug(session.user.businessName);
+
+      // Check if slug already exists
+      const existingLink = await db.collectionLink.findUnique({
+        where: { slug: baseSlug },
+      });
+
+      finalSlug = existingLink 
+        ? `${baseSlug}-${Date.now().toString(36)}`
+        : baseSlug;
+    }
 
     // Create collection link
     const collectionLink = await db.collectionLink.create({
@@ -146,7 +227,7 @@ export async function POST(request: NextRequest) {
         slug: finalSlug,
         title,
         description,
-        isActive: true,
+        isActive: Boolean(isActive),
       },
     });
 
